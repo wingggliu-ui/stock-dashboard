@@ -1243,7 +1243,14 @@ header {
     var trends = minuteData.trends;
     if (trends.length === 0) return;
 
-    var times = trends.map(function(d) { return d.time.substring(0, 2) + ':' + d.time.substring(2, 4); });
+    var times = trends.map(function(d) {
+      var t = d.time;
+      // "2026-05-29 09:30:00" → "09:30"; "0930" → "09:30"
+      var m = t.match(/(\d{2}):(\d{2})(?::\d{2})?$/);
+      if (m) return m[1] + ':' + m[2];
+      if (t.length >= 5 && t[t.length-3] === ':') return t.slice(-5);
+      return t.substring(0, 2) + ':' + t.substring(2, 4);
+    });
     var prices = trends.map(function(d) { return d.price; });
     var avgPrices = trends.map(function(d) { return d.avgPrice; });
     var volumes = trends.map(function(d) { return d.volume; });
@@ -1255,6 +1262,35 @@ header {
     var minPrice = Math.min.apply(null, prices);
     var range = maxPrice - minPrice || 1;
 
+    // 找到四格分界时间索引: 9:30→10:30→11:30/13:00→14:00→15:00
+    var breaks = ['09:30', '10:30', '11:30', '13:00', '14:00', '15:00'];
+    var breakIdxs = [];
+    for (var b = 0; b < breaks.length; b++) {
+      var found = -1;
+      for (var i = 0; i < times.length; i++) {
+        if (times[i] >= breaks[b]) { found = i; break; }
+      }
+      if (found >= 0) breakIdxs.push(found);
+    }
+    // 生成4段markArea: [09:30-10:30][10:30-11:30][13:00-14:00][14:00-15:00]
+    var markAreas = [];
+    var areaColors = [
+      ['rgba(255,255,255,0.015)', 'rgba(255,255,255,0.005)'],
+      ['rgba(255,255,255,0.005)', 'rgba(255,255,255,0.015)'],
+      ['rgba(255,255,255,0.015)', 'rgba(255,255,255,0.005)'],
+      ['rgba(255,255,255,0.005)', 'rgba(255,255,255,0.015)'],
+    ];
+    for (var s = 0; s < 4; s++) {
+      if (breakIdxs[s] >= 0 && breakIdxs[s+1] > breakIdxs[s]) {
+        markAreas.push([{ xAxis: times[breakIdxs[s]], itemStyle: { color: areaColors[s][0] } }, { xAxis: times[breakIdxs[s+1]-1], itemStyle: { color: areaColors[s][1] } }]);
+      }
+    }
+    // 分界markLines
+    var markLines = [];
+    for (var l = 1; l < breakIdxs.length - 1; l++) {
+      if (breakIdxs[l] >= 0) markLines.push({ xAxis: times[breakIdxs[l]], lineStyle: { color: 'rgba(255,255,255,0.12)', type: 'dashed', width: 1 } });
+    }
+
     var option = {
       backgroundColor: 'transparent',
       grid: [
@@ -1265,7 +1301,16 @@ header {
           type: 'category', data: times, gridIndex: 0,
           axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
           axisTick: { show: false },
-          axisLabel: { color: '#94a3b8', fontSize: 9, interval: 29 },
+          axisLabel: {
+            color: '#94a3b8', fontSize: 9,
+            formatter: function(v) {
+              var key = ['09:30', '10:30', '11:30', '13:00', '14:00', '15:00'];
+              if (key.indexOf(v) >= 0) return v;
+              // 每半小时显示
+              if (v.substring(3) === '00' || v.substring(3) === '30') return v;
+              return '';
+            },
+          },
           splitLine: { show: false },
         },
       ],
@@ -1287,6 +1332,7 @@ header {
           xAxisIndex: 0, yAxisIndex: 0, symbol: 'none',
           lineStyle: { width: 1.5, color: UP_COLOR },
           areaStyle: { color: 'rgba(255,71,87,0.08)' },
+          markArea: { silent: true, data: markAreas },
         },
         {
           name: '价格(低于昨收)', type: 'line', data: belowPrices,
@@ -1299,6 +1345,11 @@ header {
           xAxisIndex: 0, yAxisIndex: 0,
           lineStyle: { width: 1, color: '#f59e0b', type: 'dashed' },
           symbol: 'none',
+          markLine: {
+            silent: true, symbol: 'none',
+            lineStyle: { color: 'rgba(255,255,255,0.12)', type: 'dashed', width: 1 },
+            data: markLines,
+          },
         },
         {
           name: '昨收', type: 'line',
