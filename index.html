@@ -204,6 +204,7 @@ header {
 
 .indicator-chart { width: 100%; height: 180px; }
 .minute-indicators-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.combined-indicator-chart { width: 100%; height: 420px; }
 
 /* ===== 指标评分徽章 ===== */
 .indicator-score {
@@ -341,35 +342,16 @@ header {
 
   <!-- 分时图技术指标 -->
   <div class="minute-indicators-grid" id="minuteIndicators" style="display:none;">
-    <div class="chart-panel">
+    <div class="chart-panel" style="grid-column:1/-1">
       <div class="chart-panel-header">
-        <h3>MACD(12,26,9)</h3>
-        <div class="score-row">
-          <div class="score-bar-wrap"><div class="score-bar-dot" id="macdDot" style="left:50%"></div></div>
-          <span class="indicator-score neutral" id="macdScore">--</span>
+        <h3>技术指标联动</h3>
+        <div class="score-row" style="gap:16px">
+          <span class="indicator-score neutral" id="macdScore2">MACD --</span>
+          <span class="indicator-score neutral" id="rsiScore2">RSI --</span>
+          <span class="indicator-score neutral" id="kdjScore2">KDJ --</span>
         </div>
       </div>
-      <div class="indicator-chart" id="macdChart"></div>
-    </div>
-    <div class="chart-panel">
-      <div class="chart-panel-header">
-        <h3>RSI(14)</h3>
-        <div class="score-row">
-          <div class="score-bar-wrap"><div class="score-bar-dot" id="rsiDot" style="left:50%"></div></div>
-          <span class="indicator-score neutral" id="rsiScore">--</span>
-        </div>
-      </div>
-      <div class="indicator-chart" id="rsiChart"></div>
-    </div>
-    <div class="chart-panel">
-      <div class="chart-panel-header">
-        <h3>KDJ(9,3,3)</h3>
-        <div class="score-row">
-          <div class="score-bar-wrap"><div class="score-bar-dot" id="kdjDot" style="left:50%"></div></div>
-          <span class="indicator-score neutral" id="kdjScore">--</span>
-        </div>
-      </div>
-      <div class="indicator-chart" id="kdjChart"></div>
+      <div class="combined-indicator-chart" id="combinedChart"></div>
     </div>
   </div>
 
@@ -420,6 +402,7 @@ header {
     macdChart: null,
     rsiChart: null,
     kdjChart: null,
+    combinedChart: null,
     klineData: [],
     timer: null,
     activeGroup: '全部',
@@ -1098,168 +1081,100 @@ header {
     return { score: score, label: label, cls: cls };
   }
 
-  function updateScoreDisplay(id, result) {
-    var el = document.getElementById(id + 'Score');
-    if (!el) return;
-    el.textContent = result.label;
-    el.className = 'indicator-score ' + result.cls;
+  // ==================== 分时指标渲染（联动合并） ====================
 
-    var dot = document.getElementById(id + 'Dot');
-    if (dot) {
-      // -10 → left:0%, 0 → left:50%, 10 → left:100%
-      dot.style.left = (50 + result.score * 5) + '%';
-    }
-  }
-
-  // ==================== 分时指标渲染 ====================
-
-  function renderMACD(macdData) {
-    var container = document.getElementById('macdChart');
-    if (!state.macdChart) {
-      state.macdChart = echarts.init(container, null, { renderer: 'canvas' });
+  function renderCombinedIndicators(macdData, rsiData, kdjData) {
+    var container = document.getElementById('combinedChart');
+    if (!state.combinedChart) {
+      state.combinedChart = echarts.init(container, null, { renderer: 'canvas' });
     }
 
     var dates = macdData.dates;
     var option = {
       backgroundColor: 'transparent',
-      grid: { left: '10%', right: '3%', top: 10, bottom: '12%' },
-      xAxis: { type: 'category', data: dates, axisLabel: { show: false }, axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }, axisTick: { show: false }, splitLine: { show: false } },
-      yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } }, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisLine: { show: false }, axisTick: { show: false } },
-      series: [
-        {
-          name: 'DIF', type: 'line', data: macdData.dif, smooth: true,
-          lineStyle: { width: 1.5, color: '#f59e0b' }, symbol: 'none',
-        },
-        {
-          name: 'DEA', type: 'line', data: macdData.dea, smooth: true,
-          lineStyle: { width: 1.5, color: '#06b6d4' }, symbol: 'none',
-        },
-        {
-          name: 'MACD柱', type: 'bar',
-          data: macdData.macd.map(function(v) {
-            return { value: v, itemStyle: { color: v >= 0 ? UP_COLOR : DOWN_COLOR } };
-          }),
-          barWidth: '60%',
-        },
+      grid: [
+        { left: '8%', right: '3%', top: 8, height: '26%' },
+        { left: '8%', right: '3%', top: '37%', height: '28%' },
+        { left: '8%', right: '3%', top: '68%', height: '26%' },
       ],
-      tooltip: {
-        trigger: 'axis',
-        backgroundColor: 'rgba(15,15,46,0.95)', borderColor: 'rgba(255,255,255,0.15)',
-        textStyle: { color: '#e2e8f0', fontSize: 11 },
-        formatter: function(params) {
-          if (!params || params.length === 0) return '';
-          var t = params[0].axisValue;
-          var html = '<div style="font-weight:600;margin-bottom:4px">' + t + '</div>';
-          for (var i = 0; i < params.length; i++) {
-            var p = params[i], v = p.value;
-            html += '<div style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:2px;background:' + (p.color || '#e2e8f0') + '"></span><span style="color:#94a3b8">' + p.seriesName + '</span><span style="color:#e2e8f0;margin-left:auto">' + (v != null ? (typeof v === 'number' ? v.toFixed(3) : v) : '-') + '</span></div>';
-          }
-          return html;
-        },
-      },
-      legend: { show: true, bottom: 0, textStyle: { color: '#94a3b8', fontSize: 10 }, data: ['DIF', 'DEA'] },
-      dataZoom: [{ type: 'inside', start: 50, end: 100 }],
-    };
-    state.macdChart.setOption(option);
-    var macdSe = computeMACDScore(macdData);
-    updateScoreDisplay('macd', macdSe);
-  }
-
-  function renderRSI(rsiData) {
-    var container = document.getElementById('rsiChart');
-    if (!state.rsiChart) {
-      state.rsiChart = echarts.init(container, null, { renderer: 'canvas' });
-    }
-
-    var dates = rsiData.dates;
-    var option = {
-      backgroundColor: 'transparent',
-      grid: { left: '10%', right: '3%', top: 15, bottom: '12%' },
-      xAxis: { type: 'category', data: dates, axisLabel: { show: false }, axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }, axisTick: { show: false }, splitLine: { show: false } },
-      yAxis: { type: 'value', min: 0, max: 100, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } }, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisLine: { show: false }, axisTick: { show: false } },
+      xAxis: [
+        { type: 'category', data: dates, gridIndex: 0, axisLabel: { show: false }, axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }, axisTick: { show: false }, splitLine: { show: false } },
+        { type: 'category', data: dates, gridIndex: 1, axisLabel: { show: false }, axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }, axisTick: { show: false }, splitLine: { show: false } },
+        { type: 'category', data: dates, gridIndex: 2, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }, axisTick: { show: false }, splitLine: { show: false } },
+      ],
+      yAxis: [
+        { type: 'value', gridIndex: 0, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } }, axisLabel: { color: '#94a3b8', fontSize: 8 }, axisLine: { show: false }, axisTick: { show: false } },
+        { type: 'value', gridIndex: 1, min: 0, max: 100, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } }, axisLabel: { color: '#94a3b8', fontSize: 8 }, axisLine: { show: false }, axisTick: { show: false } },
+        { type: 'value', gridIndex: 2, min: 0, max: 100, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } }, axisLabel: { color: '#94a3b8', fontSize: 8 }, axisLine: { show: false }, axisTick: { show: false } },
+      ],
       series: [
-        {
-          name: 'RSI', type: 'line', data: rsiData.rsi, smooth: true,
-          lineStyle: { width: 2, color: '#a855f7' },
-          areaStyle: { color: 'rgba(168,85,247,0.1)' },
-          symbol: 'none',
-          markLine: {
-            silent: true, symbol: 'none',
+        // === MACD (grid 0) ===
+        { name: 'DIF', type: 'line', data: macdData.dif, smooth: true, xAxisIndex: 0, yAxisIndex: 0, lineStyle: { width: 1.5, color: '#f59e0b' }, symbol: 'none' },
+        { name: 'DEA', type: 'line', data: macdData.dea, smooth: true, xAxisIndex: 0, yAxisIndex: 0, lineStyle: { width: 1.5, color: '#06b6d4' }, symbol: 'none' },
+        { name: 'MACD柱', type: 'bar', xAxisIndex: 0, yAxisIndex: 0, barWidth: '60%',
+          data: macdData.macd.map(function(v) { return { value: v, itemStyle: { color: v >= 0 ? UP_COLOR : DOWN_COLOR } }; }),
+        },
+        // === RSI (grid 1) ===
+        { name: 'RSI', type: 'line', data: rsiData.rsi, smooth: true, xAxisIndex: 1, yAxisIndex: 1,
+          lineStyle: { width: 2, color: '#a855f7' }, areaStyle: { color: 'rgba(168,85,247,0.1)' }, symbol: 'none',
+          markLine: { silent: true, symbol: 'none',
             data: [
-              { yAxis: 70, lineStyle: { color: 'rgba(255,71,87,0.3)', type: 'dashed', width: 1 }, label: { formatter: '70', color: '#ff4757', fontSize: 9 } },
-              { yAxis: 30, lineStyle: { color: 'rgba(46,213,115,0.3)', type: 'dashed', width: 1 }, label: { formatter: '30', color: '#2ed573', fontSize: 9 } },
-              { yAxis: 50, lineStyle: { color: 'rgba(255,255,255,0.15)', type: 'dotted', width: 1 }, label: { formatter: '50', color: '#94a3b8', fontSize: 9 } },
+              { yAxis: 70, lineStyle: { color: 'rgba(255,71,87,0.3)', type: 'dashed', width: 1 }, label: { formatter: '70', color: '#ff4757', fontSize: 8 } },
+              { yAxis: 30, lineStyle: { color: 'rgba(46,213,115,0.3)', type: 'dashed', width: 1 }, label: { formatter: '30', color: '#2ed573', fontSize: 8 } },
+              { yAxis: 50, lineStyle: { color: 'rgba(255,255,255,0.12)', type: 'dotted', width: 1 } },
             ],
           },
         },
+        // === KDJ (grid 2) ===
+        { name: 'K', type: 'line', data: kdjData.k, smooth: true, xAxisIndex: 2, yAxisIndex: 2, lineStyle: { width: 1.5, color: '#f59e0b' }, symbol: 'none' },
+        { name: 'D', type: 'line', data: kdjData.d, smooth: true, xAxisIndex: 2, yAxisIndex: 2, lineStyle: { width: 1.5, color: '#06b6d4' }, symbol: 'none' },
+        { name: 'J', type: 'line', data: kdjData.j, smooth: true, xAxisIndex: 2, yAxisIndex: 2, lineStyle: { width: 1.2, color: '#ec4899', opacity: 0.6 }, symbol: 'none' },
       ],
       tooltip: {
-        trigger: 'axis',
+        trigger: 'axis', axisPointer: { type: 'cross' },
         backgroundColor: 'rgba(15,15,46,0.95)', borderColor: 'rgba(255,255,255,0.15)',
         textStyle: { color: '#e2e8f0', fontSize: 11 },
         formatter: function(params) {
-          if (!params || params.length === 0) return '';
-          var p = params[0];
-          var v = p.value;
-          var zone = v >= 70 ? '超买区' : v <= 30 ? '超卖区' : '中性区';
-          return '<div style="font-weight:600;margin-bottom:4px">' + p.axisValue + '</div><div>RSI: <span style="color:#a855f7;font-weight:600">' + v + '</span> (' + zone + ')</div>';
-        },
-      },
-      legend: { show: false },
-      dataZoom: [{ type: 'inside', start: 50, end: 100 }],
-    };
-    state.rsiChart.setOption(option);
-    var rsiSc = computeRSIScore(rsiData);
-    updateScoreDisplay('rsi', rsiSc);
-  }
-
-  function renderKDJ(kdjData) {
-    var container = document.getElementById('kdjChart');
-    if (!state.kdjChart) {
-      state.kdjChart = echarts.init(container, null, { renderer: 'canvas' });
-    }
-
-    var dates = kdjData.dates;
-    var option = {
-      backgroundColor: 'transparent',
-      grid: { left: '10%', right: '3%', top: 15, bottom: '12%' },
-      xAxis: { type: 'category', data: dates, axisLabel: { show: false }, axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }, axisTick: { show: false }, splitLine: { show: false } },
-      yAxis: { type: 'value', min: 0, max: 100, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } }, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisLine: { show: false }, axisTick: { show: false } },
-      series: [
-        {
-          name: 'K', type: 'line', data: kdjData.k, smooth: true,
-          lineStyle: { width: 1.5, color: '#f59e0b' }, symbol: 'none',
-        },
-        {
-          name: 'D', type: 'line', data: kdjData.d, smooth: true,
-          lineStyle: { width: 1.5, color: '#06b6d4' }, symbol: 'none',
-        },
-        {
-          name: 'J', type: 'line', data: kdjData.j, smooth: true,
-          lineStyle: { width: 1.2, color: '#ec4899', opacity: 0.6 }, symbol: 'none',
-        },
-      ],
-      tooltip: {
-        trigger: 'axis',
-        backgroundColor: 'rgba(15,15,46,0.95)', borderColor: 'rgba(255,255,255,0.15)',
-        textStyle: { color: '#e2e8f0', fontSize: 11 },
-        formatter: function(params) {
-          if (!params || params.length === 0) return '';
+          if (!params || params.length < 3) return '';
           var t = params[0].axisValue;
-          var html = '<div style="font-weight:600;margin-bottom:4px">' + t + '</div>';
-          for (var i = 0; i < params.length; i++) {
-            var p = params[i];
-            html += '<div style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:2px;background:' + (p.color || '#e2e8f0') + '"></span><span style="color:#94a3b8">' + p.seriesName + '</span><span style="color:#e2e8f0;margin-left:auto">' + (p.value != null ? p.value : '-') + '</span></div>';
-          }
+          var html = '<div style="font-weight:600;margin-bottom:6px;font-size:12px">' + t + '</div>';
+          html += '<div style="color:#f59e0b;font-size:11px;margin-bottom:4px">▎MACD</div>';
+          html += '<span style="color:#f59e0b">DIF</span> ' + (params[0].value||'-') + ' <span style="color:#06b6d4">DEA</span> ' + (params[1].value||'-') + ' <span style="color:#94a3b8">柱</span> ' + (params[2].value!=null?params[2].value.toFixed(3):'-') + '<br>';
+          html += '<div style="color:#a855f7;font-size:11px;margin:4px 0">▎RSI(14)</div>';
+          html += '<span style="color:#a855f7">' + (params[3].value||'-') + '</span>';
+          if (params[3].value >= 70) html += ' <span style="color:#ff4757">超买</span>';
+          else if (params[3].value <= 30) html += ' <span style="color:#2ed573">超卖</span>';
+          else html += ' <span style="color:#94a3b8">中性</span>';
+          html += '<br>';
+          html += '<div style="color:#ec4899;font-size:11px;margin:4px 0">▎KDJ</div>';
+          html += '<span style="color:#f59e0b">K</span> ' + (params[4].value||'-') + ' <span style="color:#06b6d4">D</span> ' + (params[5].value||'-') + ' <span style="color:#ec4899">J</span> ' + (params[6].value||'-');
           return html;
         },
       },
-      legend: { show: true, bottom: 0, textStyle: { color: '#94a3b8', fontSize: 10 }, data: ['K', 'D', 'J'] },
-      dataZoom: [{ type: 'inside', start: 50, end: 100 }],
+      legend: { show: true, bottom: 0, textStyle: { color: '#94a3b8', fontSize: 10 }, data: ['DIF', 'DEA', 'RSI', 'K', 'D', 'J'] },
+      dataZoom: [
+        { type: 'inside', xAxisIndex: [0, 1, 2], start: 50, end: 100 },
+        { type: 'slider', xAxisIndex: [0, 1, 2], start: 50, end: 100, height: 16, bottom: 24, borderColor: 'rgba(255,255,255,0.1)', backgroundColor: 'rgba(255,255,255,0.03)', fillerColor: 'rgba(168,85,247,0.1)', handleStyle: { color: '#a855f7' }, textStyle: { color: '#94a3b8', fontSize: 9 } },
+      ],
     };
-    state.kdjChart.setOption(option);
+    state.combinedChart.setOption(option);
+
+    // 更新评分
+    var macdSc = computeMACDScore(macdData);
+    var rsiSc = computeRSIScore(rsiData);
     var kdjSc = computeKDJScore(kdjData);
-    updateScoreDisplay('kdj', kdjSc);
+    updateScoreDisplay2('macdScore2', macdSc);
+    updateScoreDisplay2('rsiScore2', rsiSc);
+    updateScoreDisplay2('kdjScore2', kdjSc);
+  }
+
+  function updateScoreDisplay2(id, result) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = 'MACD ' + result.label;
+    if (id.indexOf('rsi') >= 0) el.textContent = 'RSI ' + result.label;
+    if (id.indexOf('kdj') >= 0) el.textContent = 'KDJ ' + result.label;
+    el.className = 'indicator-score ' + result.cls;
   }
 
   // ==================== K线渲染 ====================
@@ -1343,8 +1258,7 @@ header {
     var option = {
       backgroundColor: 'transparent',
       grid: [
-        { left: '8%', right: '3%', top: 15, height: '65%' },
-        { left: '8%', right: '3%', top: '82%', height: '14%' },
+        { left: '8%', right: '3%', top: 15, height: '85%' },
       ],
       xAxis: [
         {
@@ -1352,13 +1266,6 @@ header {
           axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
           axisTick: { show: false },
           axisLabel: { color: '#94a3b8', fontSize: 9, interval: 29 },
-          splitLine: { show: false },
-        },
-        {
-          type: 'category', data: times, gridIndex: 1,
-          axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
-          axisTick: { show: false },
-          axisLabel: { show: false },
           splitLine: { show: false },
         },
       ],
@@ -1371,12 +1278,6 @@ header {
             color: '#94a3b8', fontSize: 10,
             formatter: function(v) { return v.toFixed(2); },
           },
-          axisLine: { show: false }, axisTick: { show: false },
-        },
-        {
-          type: 'value', gridIndex: 1,
-          splitLine: { show: false },
-          axisLabel: { show: false },
           axisLine: { show: false }, axisTick: { show: false },
         },
       ],
@@ -1408,13 +1309,6 @@ header {
             data: [{ yAxis: preClose }],
           },
           data: [], xAxisIndex: 0, yAxisIndex: 0,
-        },
-        {
-          name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1,
-          data: volumes.map(function(v, i) {
-            var isUp = prices[i] >= preClose;
-            return { value: v, itemStyle: { color: isUp ? UP_COLOR : DOWN_COLOR } };
-          }),
         },
       ],
       tooltip: {
@@ -1502,13 +1396,9 @@ header {
           state.klineData = dkData;
 
           var macdData = computeMACDSeries(dkData);
-          renderMACD(macdData);
-
           var rsiData = computeRSISeries(dkData, 14);
-          renderRSI(rsiData);
-
           var kdjData = computeKDJSeries(dkData, 9);
-          renderKDJ(kdjData);
+          renderCombinedIndicators(macdData, rsiData, kdjData);
         }).catch(function(e) {
           console.error('分时指标数据加载失败:', e);
         });
