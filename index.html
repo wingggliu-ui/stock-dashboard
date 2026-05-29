@@ -206,6 +206,20 @@ header {
 .minute-indicators-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 .combined-indicator-chart { width: 100%; height: 340px; }
 
+/* 指标信息面板 */
+.indicator-info-panel {
+  position: absolute; right: 8px; top: 8px; bottom: 28px;
+  width: 110px; display: flex; flex-direction: column; gap: 0;
+  pointer-events: none; z-index: 10;
+}
+.indicator-info-row {
+  flex: 1; background: rgba(15,15,46,0.85); border: 1px solid rgba(255,255,255,0.1);
+  padding: 6px 8px; font-size: 10px; color: #e2e8f0; line-height: 1.6;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.indicator-info-row .info-title { color: #94a3b8; font-size: 9px; margin-bottom: 2px; }
+.combined-chart-wrap { position: relative; }
+
 /* ===== 指标评分徽章 ===== */
 .indicator-score {
   display: inline-flex; align-items: center; gap: 4px;
@@ -348,7 +362,14 @@ header {
           <span class="indicator-score neutral" id="kdjScore2">KDJ --</span>
         </div>
       </div>
-      <div class="combined-indicator-chart" id="combinedChart"></div>
+      <div class="combined-chart-wrap">
+        <div class="combined-indicator-chart" id="combinedChart"></div>
+        <div class="indicator-info-panel" id="indicatorInfoPanel">
+          <div class="indicator-info-row" id="infoMACD"><span class="info-title">MACD</span>--</div>
+          <div class="indicator-info-row" id="infoRSI"><span class="info-title">RSI</span>--</div>
+          <div class="indicator-info-row" id="infoKDJ"><span class="info-title">KDJ</span>--</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1154,6 +1175,16 @@ header {
     };
     state.combinedChart.setOption(option);
 
+    // 鼠标悬停时更新信息面板
+    state.combinedChart.off('mousemove');
+    state.combinedChart.on('mousemove', function(params) {
+      if (params && params.dataIndex != null) {
+        var n = params.dataIndex;
+        // 确保使用正确的数据集（所有子图共享index）
+        updateIndicatorInfoPanel(macdData, rsiData, kdjData, n);
+      }
+    });
+
     // 更新评分
     var macdSc = computeMACDScore(macdData);
     var rsiSc = computeRSIScore(rsiData);
@@ -1161,15 +1192,37 @@ header {
     updateScoreDisplay2('macdScore2', macdSc);
     updateScoreDisplay2('rsiScore2', rsiSc);
     updateScoreDisplay2('kdjScore2', kdjSc);
+
+    // 更新右侧信息面板
+    var n = macdData.dif.length - 1;
+    updateIndicatorInfoPanel(macdData, rsiData, kdjData, n);
   }
 
-  function updateScoreDisplay2(id, result) {
-    var el = document.getElementById(id);
-    if (!el) return;
-    el.textContent = 'MACD ' + result.label;
-    if (id.indexOf('rsi') >= 0) el.textContent = 'RSI ' + result.label;
-    if (id.indexOf('kdj') >= 0) el.textContent = 'KDJ ' + result.label;
-    el.className = 'indicator-score ' + result.cls;
+  function updateIndicatorInfoPanel(macdData, rsiData, kdjData, idx) {
+    var n = idx != null ? idx : macdData.dif.length - 1;
+    if (n < 0 || macdData.dif[n] == null) return;
+
+    var difV = macdData.dif[n].toFixed(3);
+    var deaV = macdData.dea[n].toFixed(3);
+    var macV = macdData.macd[n].toFixed(3);
+    var macdClr = macdData.macd[n] >= 0 ? '#ff4757' : '#2ed573';
+    document.getElementById('infoMACD').innerHTML = '<span class="info-title">MACD</span>'
+      + '<span style="color:#f59e0b">DIF</span> ' + difV
+      + ' <span style="color:#06b6d4">DEA</span> ' + deaV
+      + ' <span style="color:' + macdClr + '">柱</span> ' + macV;
+
+    var rsiV = rsiData.rsi[n];
+    var rsiZone = rsiV >= 70 ? '<span style="color:#ff4757">超买</span>' : rsiV <= 30 ? '<span style="color:#2ed573">超卖</span>' : '<span style="color:#94a3b8">中性</span>';
+    document.getElementById('infoRSI').innerHTML = '<span class="info-title">RSI</span>'
+      + '<span style="color:#a855f7">' + (rsiV != null ? rsiV : '--') + '</span> ' + rsiZone;
+
+    var kV = kdjData.k[n] != null ? kdjData.k[n] : '--';
+    var dV = kdjData.d[n] != null ? kdjData.d[n] : '--';
+    var jV = kdjData.j[n] != null ? kdjData.j[n] : '--';
+    document.getElementById('infoKDJ').innerHTML = '<span class="info-title">KDJ</span>'
+      + '<span style="color:#f59e0b">K</span> ' + kV
+      + ' <span style="color:#06b6d4">D</span> ' + dV
+      + ' <span style="color:#ec4899">J</span> ' + jV;
   }
 
   // ==================== K线渲染 ====================
