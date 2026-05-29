@@ -883,8 +883,12 @@ header {
       var dot = document.querySelector('.status-dot');
       if (dot) dot.classList.remove('error');
       document.getElementById('updateTime').textContent = '最后更新: ' + new Date().toLocaleTimeString();
+      // 更新浏览器标签页标题
+      var sign = rt.changePct >= 0 ? '+' : '';
+      document.title = rt.name + ' ' + rt.price.toFixed(2) + ' ' + sign + rt.change.toFixed(2) + '(' + sign + rt.changePct.toFixed(2) + '%)';
     } catch (e) {
       console.error('实时数据获取失败:', e);
+      document.title = 'A股盯盘助手';
       document.getElementById('statusBadge').style.background = 'rgba(255,71,87,0.1)';
       document.getElementById('statusBadge').style.color = UP_COLOR;
       document.getElementById('statusText').textContent = '数据异常';
