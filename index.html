@@ -1257,13 +1257,13 @@ header {
     var minPrice = Math.min.apply(null, prices);
     var range = maxPrice - minPrice || 1;
 
-    // 3根分界虚线: 10:30 / 11:30-13:00 / 14:00
-    var divTimes = ['10:30', '11:30', '13:00', '14:00'];
+    // 3根分界虚线: 10:30 / 11:30-13:00 / 14:00（均分四格）
     var markLines = [];
+    var divTimes = ['10:30', '11:30', '14:00'];
     for (var d = 0; d < divTimes.length; d++) {
       for (var i = 0; i < times.length; i++) {
         if (times[i] >= divTimes[d]) {
-          markLines.push({ xAxis: times[i], lineStyle: { color: 'rgba(255,255,255,0.18)', type: 'dashed', width: 1 } });
+          markLines.push({ xAxis: times[i], label: { show: false }, lineStyle: { color: 'rgba(255,255,255,0.18)', type: 'dashed', width: 1 } });
           break;
         }
       }
@@ -1282,10 +1282,10 @@ header {
           axisLabel: {
             color: '#94a3b8', fontSize: 9,
             formatter: function(v) {
-              var key = ['09:30', '10:30', '11:30', '13:00', '14:00', '15:00'];
+              var map = {'11:30': '11:30/13:00', '13:00': ''};
+              if (map[v] !== undefined) return map[v];
+              var key = ['09:30', '10:30', '14:00', '15:00'];
               if (key.indexOf(v) >= 0) return v;
-              // 每半小时显示
-              if (v.substring(3) === '00' || v.substring(3) === '30') return v;
               return '';
             },
           },
