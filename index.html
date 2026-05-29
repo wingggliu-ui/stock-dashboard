@@ -342,27 +342,124 @@ header {
     dragIdx: -1,
   };
 
-  // 持久化存储
+  // 持久化存储 - 本地 + GitHub 云端同步
   const LS_KEY = 'stock_dashboard_v2';
+  const CONFIG_URL = 'https://raw.githubusercontent.com/wingggliu-ui/stock-dashboard/main/config.json';
+  const API_URL = 'https://api.github.com/repos/wingggliu-ui/stock-dashboard/contents/config.json';
+
+  function getSyncToken() {
+    return localStorage.getItem('gh_sync_token') || '';
+  }
+
+  function saveConfigToGitHub(data, token) {
+    return new Promise(function(resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('PUT', API_URL, true);
+      xhr.setRequestHeader('Authorization', 'token ' + token);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('Accept', 'application/vnd.github+json');
+      xhr.onload = function() {
+        if (xhr.status >= 200 && xhr.status < 300) { resolve(JSON.parse(xhr.responseText)); }
+        else { reject(new Error('Save failed: ' + xhr.status)); }
+      };
+      xhr.onerror = function() { reject(new Error('Network error')); };
+      xhr.send(JSON.stringify({
+        message: 'Sync config ' + new Date().toISOString().slice(0,19),
+        content: btoa(unescape(encodeURIComponent(JSON.stringify(data)))),
+        sha: xhr._sha || undefined
+      }));
+    });
+  }
+
+  function getShaForSync(data, token) {
+    return new Promise(function(resolve) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', API_URL, true);
+      xhr.setRequestHeader('Authorization', 'token ' + token);
+      xhr.setRequestHeader('Accept', 'application/vnd.github+json');
+      xhr.onload = function() {
+        if (xhr.status === 200) {
+          var info = JSON.parse(xhr.responseText);
+          resolve(info.sha);
+        } else { resolve(''); }
+      };
+      xhr.onerror = function() { resolve(''); };
+      xhr.send();
+    });
+  }
+
   function saveToStorage() {
     var data = {
       stocks: state.stocks,
       currentIdx: state.currentIdx,
       activeGroup: state.activeGroup,
+      updatedAt: Date.now()
     };
     try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch(e) {}
+
+    // 云端同步
+    var token = getSyncToken();
+    if (token) {
+      getShaForSync(data, token).then(function(sha) {
+        var body = {
+          message: 'Sync config ' + new Date().toISOString().slice(0,19).replace('T',' '),
+          content: btoa(unescape(encodeURIComponent(JSON.stringify(data)))),
+          branch: 'main'
+        };
+        if (sha) body.sha = sha;
+        var xhr = new XMLHttpRequest();
+        xhr.open('PUT', API_URL, true);
+        xhr.setRequestHeader('Authorization', 'token ' + token);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.setRequestHeader('Accept', 'application/vnd.github+json');
+        xhr.onload = function() {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            console.log('Cloud synced');
+          }
+        };
+        xhr.send(JSON.stringify(body));
+      }).catch(function() {});
+    }
   }
+
   function loadFromStorage() {
-    try {
-      var raw = localStorage.getItem(LS_KEY);
-      if (raw) {
-        var data = JSON.parse(raw);
-        if (data.stocks && data.stocks.length > 0) state.stocks = data.stocks;
-        if (typeof data.currentIdx === 'number') state.currentIdx = data.currentIdx;
-        if (data.activeGroup) state.activeGroup = data.activeGroup;
-      }
-    } catch(e) {}
-    // 确保每个stock有group字段
+    return new Promise(function(resolve) {
+      // 1. 先加载本地缓存（秒开）
+      var localData = null;
+      try {
+        var raw = localStorage.getItem(LS_KEY);
+        if (raw) localData = JSON.parse(raw);
+      } catch(e) {}
+
+      // 2. 尝试从GitHub拉取最新配置（跨设备同步）
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', CONFIG_URL, true);
+      xhr.timeout = 5000;
+      xhr.onload = function() {
+        try {
+          var cloudData = JSON.parse(xhr.responseText);
+          // 云端数据更新或本地无数据时使用云端
+          if (cloudData.stocks && cloudData.stocks.length > 0) {
+            if (!localData || cloudData.updatedAt > localData.updatedAt) {
+              localData = cloudData;
+              localStorage.setItem(LS_KEY, JSON.stringify(cloudData));
+            }
+          }
+        } catch(e) {}
+        applyData(localData);
+        resolve();
+      };
+      xhr.onerror = function() { applyData(localData); resolve(); };
+      xhr.ontimeout = function() { applyData(localData); resolve(); };
+      xhr.send();
+    });
+  }
+
+  function applyData(data) {
+    if (!data) return;
+    if (data.stocks && data.stocks.length > 0) state.stocks = data.stocks;
+    if (typeof data.currentIdx === 'number' && data.currentIdx < state.stocks.length) state.currentIdx = data.currentIdx;
+    if (data.activeGroup) state.activeGroup = data.activeGroup;
     state.stocks.forEach(function(s) { if (!s.group) s.group = '默认'; });
   }
 
@@ -1206,12 +1303,44 @@ header {
     saveToStorage();
   };
 
+  window.setupSync = function() {
+    var token = prompt('输入 GitHub Personal Access Token 以开启跨设备同步：\n\n（可在 https://github.com/settings/tokens 创建，需勾选 repo 权限）\n\n留空取消', getSyncToken());
+    if (token === null) return;
+    if (token.trim()) {
+      localStorage.setItem('gh_sync_token', token.trim());
+      document.getElementById('statusText').textContent = '云端同步已开启';
+      document.getElementById('statusBadge').style.background = 'rgba(168,85,247,0.12)';
+      document.getElementById('statusBadge').style.color = '#a855f7';
+      document.getElementById('statusBadge').style.cursor = 'default';
+      document.getElementById('statusBadge').onclick = null;
+      saveToStorage();
+    } else {
+      localStorage.removeItem('gh_sync_token');
+      document.getElementById('statusBadge').onclick = setupSync;
+    }
+  };
+
   async function init() {
-    loadFromStorage();
+    await loadFromStorage();
     initGroupBar();
     initStockSelector();
     initPeriodSelector();
     initMAToggles();
+
+    // 云端同步提示
+    setTimeout(function() {
+      if (!getSyncToken()) {
+        document.getElementById('statusText').textContent = '点击开启云端同步';
+        document.getElementById('statusBadge').style.cursor = 'pointer';
+        document.getElementById('statusBadge').title = '点击设置 GitHub Token 实现多设备同步';
+        document.getElementById('statusBadge').onclick = setupSync;
+      } else {
+        document.getElementById('statusText').textContent = '云端同步中';
+        document.getElementById('statusBadge').style.background = 'rgba(168,85,247,0.12)';
+        document.getElementById('statusBadge').style.color = '#a855f7';
+      }
+    }, 2000);
+
     await loadKline();
     refreshAll();
     state.timer = setInterval(refreshAll, 6000);
