@@ -572,7 +572,7 @@ header {
     return new Promise(function(resolve, reject) {
       var name = '_cb' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
       var script = document.createElement('script');
-      var timeout = setTimeout(function() { cleanup(); reject(new Error('JSONP timeout')); }, 8000);
+      var timeout = setTimeout(function() { cleanup(); reject(new Error('JSONP timeout')); }, 5000);
       function cleanup() { clearTimeout(timeout); delete window[name]; if (script.parentNode) script.parentNode.removeChild(script); }
       window[name] = function(data) { cleanup(); resolve(data); };
       script.src = url + (url.indexOf('?') === -1 ? '?' : '&') + 'cb=' + name;
@@ -661,6 +661,11 @@ header {
   }
 
   function updateMetrics(data) {
+    // 缓存检查：数据无变化时跳过DOM更新
+    var key = data.price.toFixed(2) + '|' + data.changePct.toFixed(2) + '|' + data.volume;
+    if (state._metricsKey === key) return;
+    state._metricsKey = key;
+
     var grid = document.getElementById('metricsGrid');
     var isUp = data.changePct >= 0;
     var colorClass = data.changePct === 0 ? 'neutral' : (isUp ? 'up' : 'down');
@@ -910,8 +915,9 @@ header {
 
   function renderFishingSeason(fsData) {
     var container = document.getElementById('fishingChart');
-    if (state.fishingChart) state.fishingChart.dispose();
-    state.fishingChart = echarts.init(container, null, { renderer: 'canvas' });
+    if (!state.fishingChart) {
+      state.fishingChart = echarts.init(container, null, { renderer: 'canvas' });
+    }
 
     var dates = fsData.dates;
     var option = {
@@ -952,8 +958,9 @@ header {
 
   function renderMainForce(mfData) {
     var container = document.getElementById('mainForceChart');
-    if (state.mainForceChart) state.mainForceChart.dispose();
-    state.mainForceChart = echarts.init(container, null, { renderer: 'canvas' });
+    if (!state.mainForceChart) {
+      state.mainForceChart = echarts.init(container, null, { renderer: 'canvas' });
+    }
 
     var dates = mfData.dates;
     var option = {
@@ -1108,8 +1115,9 @@ header {
 
   function renderMACD(macdData) {
     var container = document.getElementById('macdChart');
-    if (state.macdChart) state.macdChart.dispose();
-    state.macdChart = echarts.init(container, null, { renderer: 'canvas' });
+    if (!state.macdChart) {
+      state.macdChart = echarts.init(container, null, { renderer: 'canvas' });
+    }
 
     var dates = macdData.dates;
     var option = {
@@ -1159,8 +1167,9 @@ header {
 
   function renderRSI(rsiData) {
     var container = document.getElementById('rsiChart');
-    if (state.rsiChart) state.rsiChart.dispose();
-    state.rsiChart = echarts.init(container, null, { renderer: 'canvas' });
+    if (!state.rsiChart) {
+      state.rsiChart = echarts.init(container, null, { renderer: 'canvas' });
+    }
 
     var dates = rsiData.dates;
     var option = {
@@ -1206,8 +1215,9 @@ header {
 
   function renderKDJ(kdjData) {
     var container = document.getElementById('kdjChart');
-    if (state.kdjChart) state.kdjChart.dispose();
-    state.kdjChart = echarts.init(container, null, { renderer: 'canvas' });
+    if (!state.kdjChart) {
+      state.kdjChart = echarts.init(container, null, { renderer: 'canvas' });
+    }
 
     var dates = kdjData.dates;
     var option = {
@@ -1783,6 +1793,16 @@ header {
     await loadKline();
     refreshAll();
     state.timer = setInterval(refreshAll, 6000);
+
+    // 页面不可见时暂停刷新
+    document.addEventListener('visibilitychange', function() {
+      if (document.hidden) {
+        if (state.timer) { clearInterval(state.timer); state.timer = null; }
+      } else {
+        refreshAll();
+        if (!state.timer) state.timer = setInterval(refreshAll, 6000);
+      }
+    });
   }
 
   document.addEventListener('DOMContentLoaded', init);
