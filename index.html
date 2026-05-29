@@ -120,6 +120,17 @@ header {
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 .status-dot.error { background: var(--up-red); animation: none; }
 
+/* 分组和拖拽 */
+.group-bar { display: flex; gap: 4px; margin-bottom: 6px; flex-wrap: wrap; align-items: center; }
+.group-tag { padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-size: 11px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+.group-tag:hover { border-color: rgba(255,255,255,0.2); color: var(--text-secondary); }
+.group-tag.active { background: rgba(6,182,212,0.12); border-color: var(--accent-cyan); color: var(--accent-cyan); font-weight: 500; }
+.group-tag.add-group { border-style: dashed; font-size: 13px; padding: 3px 8px; }
+.stock-btn { cursor: grab; user-select: none; }
+.stock-btn:active { cursor: grabbing; }
+.stock-btn.drag-over { border-left: 2px solid var(--accent-cyan) !important; background: rgba(6,182,212,0.08) !important; }
+.drag-ghost { opacity: 0.4; }
+
 .metrics-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; margin-bottom: 12px; }
 .metric-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; transition: all 0.2s; position: relative; overflow: hidden; }
 .metric-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-radius: 3px 0 0 3px; }
@@ -215,6 +226,7 @@ header {
       <h1>A股<span>盯盘助手</span></h1>
     </div>
     <div class="controls">
+      <div class="group-bar" id="groupBar"></div>
       <div class="stock-selector" id="stockSelector"></div>
       <button class="add-stock-btn" onclick="showAddStockModal()">+ 添加标的</button>
       <div class="period-selector" id="periodSelector"></div>
@@ -326,9 +338,54 @@ header {
     mainForceChart: null,
     klineData: [],
     timer: null,
+    activeGroup: '全部',
+    dragIdx: -1,
   };
 
+  // 持久化存储
+  const LS_KEY = 'stock_dashboard_v2';
+  function saveToStorage() {
+    var data = {
+      stocks: state.stocks,
+      currentIdx: state.currentIdx,
+      activeGroup: state.activeGroup,
+    };
+    try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch(e) {}
+  }
+  function loadFromStorage() {
+    try {
+      var raw = localStorage.getItem(LS_KEY);
+      if (raw) {
+        var data = JSON.parse(raw);
+        if (data.stocks && data.stocks.length > 0) state.stocks = data.stocks;
+        if (typeof data.currentIdx === 'number') state.currentIdx = data.currentIdx;
+        if (data.activeGroup) state.activeGroup = data.activeGroup;
+      }
+    } catch(e) {}
+    // 确保每个stock有group字段
+    state.stocks.forEach(function(s) { if (!s.group) s.group = '默认'; });
+  }
+
   function getStock() { return state.stocks[state.currentIdx]; }
+
+  // 获取所有分组
+  function getAllGroups() {
+    var groups = {};
+    state.stocks.forEach(function(s) { groups[s.group || '默认'] = true; });
+    return Object.keys(groups);
+  }
+
+  // 当前分组下的股票索引映射
+  function getVisibleStocks() {
+    if (state.activeGroup === '全部') {
+      return state.stocks.map(function(_, i) { return i; });
+    }
+    var indices = [];
+    state.stocks.forEach(function(s, i) {
+      if ((s.group || '默认') === state.activeGroup) indices.push(i);
+    });
+    return indices;
+  }
 
   function jsonp(url) {
     return new Promise(function(resolve, reject) {
@@ -930,12 +987,32 @@ header {
     }
   }
 
+  function initGroupBar() {
+    var el = document.getElementById('groupBar');
+    var groups = getAllGroups();
+    var tags = [{ name: '全部', cls: '全部' === state.activeGroup ? 'group-tag active' : 'group-tag' }];
+    groups.forEach(function(g) {
+      tags.push({ name: g, cls: g === state.activeGroup ? 'group-tag active' : 'group-tag' });
+    });
+    el.innerHTML = tags.map(function(t) {
+      return '<button class="' + t.cls + '" onclick="switchGroup(\'' + t.name.replace(/'/g, '\\\'') + '\')">' + t.name + '</button>';
+    }).join('') + '<button class="group-tag add-group" onclick="addGroup()">+</button>';
+  }
+
   function initStockSelector() {
     var el = document.getElementById('stockSelector');
-    el.innerHTML = state.stocks.map(function(s, i) {
-      var cls = i === state.currentIdx ? 'stock-btn active' : 'stock-btn';
+    var visible = getVisibleStocks();
+    if (visible.length === 0) { el.innerHTML = '<span style="font-size:12px;color:var(--text-muted);padding:7px 14px;">该分组无标的</span>'; return; }
+
+    el.innerHTML = visible.map(function(si) {
+      var s = state.stocks[si];
+      var cls = si === state.currentIdx ? 'stock-btn active' : 'stock-btn';
       var showName = s.name && s.name !== s.code ? s.name : s.code;
-      return '<button class="' + cls + '" onclick="switchStock(' + i + ')" title="' + s.code + '">' + showName + '<span style="font-size:10px;margin-left:4px;opacity:0.6">' + s.code + '</span><span class="stock-del-btn" onclick="event.stopPropagation();removeStock(' + i + ')" title="删除">&times;</span></button>';
+      return '<button class="' + cls + '" draggable="true" data-idx="' + si + '"'
+        + ' ondragstart="dragStart(event,' + si + ')" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropStock(event,' + si + ')"'
+        + ' onclick="switchStock(' + si + ')" title="' + s.code + ' | ' + (s.group||'默认') + '">' + showName
+        + '<span style="font-size:10px;margin-left:4px;opacity:0.6">' + s.code + '</span>'
+        + '<span class="stock-del-btn" onclick="event.stopPropagation();removeStock(' + si + ')" title="删除">&times;</span></button>';
     }).join('');
   }
 
@@ -954,7 +1031,69 @@ header {
     }).join('');
   }
 
-  window.switchStock = function(idx) { state.currentIdx = idx; initStockSelector(); loadKline(); };
+  window.switchStock = function(idx) {
+    state.currentIdx = idx;
+    initStockSelector();
+    loadKline();
+  };
+
+  window.switchGroup = function(group) {
+    state.activeGroup = group;
+    // 切换到该组第一个标的
+    var visible = getVisibleStocks();
+    if (visible.length > 0) {
+      state.currentIdx = visible[0];
+    }
+    initGroupBar();
+    initStockSelector();
+    loadKline();
+    saveToStorage();
+  };
+
+  window.addGroup = function() {
+    var name = prompt('输入新分组名称:');
+    if (!name || !name.trim()) return;
+    name = name.trim();
+    if (getAllGroups().indexOf(name) >= 0) { alert('分组已存在'); return; }
+    state.activeGroup = name;
+    initGroupBar();
+    saveToStorage();
+  };
+
+  window.dragStart = function(e, idx) {
+    state.dragIdx = idx;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', idx);
+    e.target.classList.add('drag-ghost');
+  };
+
+  window.dragOver = function(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    e.currentTarget.classList.add('drag-over');
+  };
+
+  window.dragLeave = function(e) {
+    e.currentTarget.classList.remove('drag-over');
+  };
+
+  window.dropStock = function(e, targetIdx) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over');
+    var fromIdx = state.dragIdx;
+    if (fromIdx < 0 || fromIdx === targetIdx) return;
+    // 移除源
+    var item = state.stocks.splice(fromIdx, 1)[0];
+    // 插入目标位置
+    state.stocks.splice(targetIdx, 0, item);
+    // 更新currentIdx
+    if (state.currentIdx === fromIdx) state.currentIdx = targetIdx;
+    else if (state.currentIdx > fromIdx && state.currentIdx <= targetIdx) state.currentIdx--;
+    else if (state.currentIdx < fromIdx && state.currentIdx >= targetIdx) state.currentIdx++;
+    state.dragIdx = -1;
+    initStockSelector();
+    saveToStorage();
+  };
   window.switchPeriod = function(klt) {
     for (var i = 0; i < state.periods.length; i++) { if (state.periods[i].klt === klt) { state.period = state.periods[i]; break; } }
     initPeriodSelector(); loadKline();
@@ -1048,10 +1187,12 @@ header {
       return;
     }
 
-    state.stocks.push({ code: code, market: market, name: name || code });
+    state.stocks.push({ code: code, market: market, name: name || code, group: state.activeGroup !== '全部' ? state.activeGroup : '默认' });
+    initGroupBar();
     initStockSelector();
     hideAddStockModal();
     switchStock(state.stocks.length - 1);
+    saveToStorage();
   };
 
   window.removeStock = function(idx) {
@@ -1059,11 +1200,15 @@ header {
     state.stocks.splice(idx, 1);
     if (state.currentIdx >= state.stocks.length) state.currentIdx = state.stocks.length - 1;
     if (state.currentIdx === idx && state.currentIdx > 0) state.currentIdx--;
+    initGroupBar();
     initStockSelector();
     loadKline();
+    saveToStorage();
   };
 
   async function init() {
+    loadFromStorage();
+    initGroupBar();
     initStockSelector();
     initPeriodSelector();
     initMAToggles();
