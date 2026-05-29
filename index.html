@@ -1281,16 +1281,13 @@ header {
           axisTick: { show: false },
           axisLabel: {
             color: '#94a3b8', fontSize: 9,
-            interval: 0,
+            interval: function(index, value) {
+              var h = parseInt(value.substring(0, 2)), m = parseInt(value.substring(3, 5));
+              return (h === 9 && m === 30) || (h === 10 && m === 30) || (h === 11 && m === 30) || (h === 14 && m === 0) || (h === 15 && m === 0);
+            },
             formatter: function(v) {
-              // 匹配最接近的关键时间点
-              var h = parseInt(v.substring(0, 2)), m = parseInt(v.substring(3, 5));
-              if (h === 9 && m === 30) return '09:30';
-              if (h === 10 && m >= 29 && m <= 31) return '10:30';
-              if (h === 11 && m >= 29 && m <= 31) return '11:30/13:00';
-              if (h === 14 && m >= 0 && m <= 1) return '14:00';
-              if (h === 15 && m >= 0 && m <= 1) return '15:00';
-              return '';
+              if (v === '11:30') return '11:30/13:00';
+              return v;
             },
           },
           splitLine: { show: false },
