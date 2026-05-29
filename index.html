@@ -788,6 +788,11 @@ header {
           data: fsData.colorBar.map(function(v, i) {
             return { value: v, itemStyle: { color: v >= 0 ? UP_COLOR : DOWN_COLOR } };
           }),
+          markLine: {
+            silent: true, symbol: 'none',
+            lineStyle: { color: '#555', type: 'solid', width: 1.2 },
+            data: [{ yAxis: 0 }],
+          },
         },
         { name: '鱼线', type: 'line', data: fsData.fishLine, smooth: true, lineStyle: { width: 1.5, color: '#f59e0b' }, symbol: 'none' },
         { name: '网线', type: 'line', data: fsData.netLine, smooth: true, lineStyle: { width: 1.5, color: '#06b6d4' }, symbol: 'none' },
@@ -826,6 +831,11 @@ header {
           lineStyle: { width: 2, color: UP_COLOR },
           areaStyle: { color: 'rgba(255,71,87,0.15)' },
           symbol: 'none',
+          markLine: {
+            silent: true, symbol: 'none',
+            lineStyle: { color: '#555', type: 'solid', width: 1.2 },
+            data: [{ yAxis: 0 }],
+          },
         },
         {
           name: '信号线', type: 'line',
