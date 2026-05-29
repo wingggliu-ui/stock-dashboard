@@ -295,9 +295,6 @@ header {
       </div>
       <div class="chart-container" id="klineChart"></div>
     </div>
-    <div class="chart-panel">
-      <div class="volume-container" id="volumeChart"></div>
-    </div>
   </div>
 
   <!-- 技术指标区域 -->
@@ -1438,7 +1435,6 @@ header {
         document.querySelector('.indicators-grid').style.display = 'none';
         document.getElementById('minuteIndicators').style.display = 'grid';
         document.getElementById('maToggles').style.visibility = 'hidden';
-        document.getElementById('volumeChart').style.display = 'none';
 
         // 加载日K数据用于技术指标计算
         fetchKline(stock, { klt: 101, label: '日K' }).then(function(dkData) {
@@ -1460,7 +1456,6 @@ header {
       document.querySelector('.indicators-grid').style.display = 'grid';
       document.getElementById('minuteIndicators').style.display = 'none';
       document.getElementById('maToggles').style.visibility = 'visible';
-      document.getElementById('volumeChart').style.display = 'block';
       var data = await fetchKline(stock, state.period);
       if (data.length === 0) return;
       data.sort(function(a, b) { return a.date.localeCompare(b.date); });
