@@ -1257,33 +1257,16 @@ header {
     var minPrice = Math.min.apply(null, prices);
     var range = maxPrice - minPrice || 1;
 
-    // 找到四格分界时间索引: 9:30→10:30→11:30/13:00→14:00→15:00
-    var breaks = ['09:30', '10:30', '11:30', '13:00', '14:00', '15:00'];
-    var breakIdxs = [];
-    for (var b = 0; b < breaks.length; b++) {
-      var found = -1;
-      for (var i = 0; i < times.length; i++) {
-        if (times[i] >= breaks[b]) { found = i; break; }
-      }
-      if (found >= 0) breakIdxs.push(found);
-    }
-    // 生成4段markArea: [09:30-10:30][10:30-11:30][13:00-14:00][14:00-15:00]
-    var markAreas = [];
-    var areaColors = [
-      ['rgba(255,255,255,0.015)', 'rgba(255,255,255,0.005)'],
-      ['rgba(255,255,255,0.005)', 'rgba(255,255,255,0.015)'],
-      ['rgba(255,255,255,0.015)', 'rgba(255,255,255,0.005)'],
-      ['rgba(255,255,255,0.005)', 'rgba(255,255,255,0.015)'],
-    ];
-    for (var s = 0; s < 4; s++) {
-      if (breakIdxs[s] >= 0 && breakIdxs[s+1] > breakIdxs[s]) {
-        markAreas.push([{ xAxis: times[breakIdxs[s]], itemStyle: { color: areaColors[s][0] } }, { xAxis: times[breakIdxs[s+1]-1], itemStyle: { color: areaColors[s][1] } }]);
-      }
-    }
-    // 分界markLines
+    // 3根分界虚线: 10:30 / 11:30-13:00 / 14:00
+    var divTimes = ['10:30', '11:30', '13:00', '14:00'];
     var markLines = [];
-    for (var l = 1; l < breakIdxs.length - 1; l++) {
-      if (breakIdxs[l] >= 0) markLines.push({ xAxis: times[breakIdxs[l]], lineStyle: { color: 'rgba(255,255,255,0.12)', type: 'dashed', width: 1 } });
+    for (var d = 0; d < divTimes.length; d++) {
+      for (var i = 0; i < times.length; i++) {
+        if (times[i] >= divTimes[d]) {
+          markLines.push({ xAxis: times[i], lineStyle: { color: 'rgba(255,255,255,0.18)', type: 'dashed', width: 1 } });
+          break;
+        }
+      }
     }
 
     var option = {
@@ -1327,7 +1310,6 @@ header {
           xAxisIndex: 0, yAxisIndex: 0, symbol: 'none',
           lineStyle: { width: 1.5, color: UP_COLOR },
           areaStyle: { color: 'rgba(255,71,87,0.08)' },
-          markArea: { silent: true, data: markAreas },
         },
         {
           name: '价格(低于昨收)', type: 'line', data: belowPrices,
