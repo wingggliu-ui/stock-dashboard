@@ -175,7 +175,6 @@ header {
 .ma-toggle.ma60.active { background: rgba(168,85,247,0.15); border-color: var(--accent-purple); }
 
 .chart-container { width: 100%; height: 420px; }
-.volume-container { width: 100%; height: 140px; }
 
 /* ===== 技术指标区域 ===== */
 .indicators-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
@@ -238,17 +237,6 @@ header {
 .indicator-score.neutral {
   background: rgba(255,255,255,0.05);
   color: #94a3b8; border: 1px solid rgba(255,255,255,0.1);
-}
-.score-bar-wrap {
-  width: 120px; height: 6px; border-radius: 3px;
-  background: linear-gradient(to right, #2ed573 0%, #2ed573 25%, #94a3b8 50%, #ff4757 75%, #ff4757 100%);
-  position: relative; overflow: visible;
-}
-.score-bar-dot {
-  position: absolute; top: -3px; width: 12px; height: 12px;
-  border-radius: 50%; background: #fff; border: 2px solid #fff;
-  box-shadow: 0 0 6px rgba(0,0,0,0.4);
-  transition: left 0.5s ease;
 }
 .score-row {
   display: flex; align-items: center; gap: 10px;
@@ -414,12 +402,8 @@ header {
     ],
     maEnabled: [true, true, true, false],
     klineChart: null,
-    volumeChart: null,
     fishingChart: null,
     mainForceChart: null,
-    macdChart: null,
-    rsiChart: null,
-    kdjChart: null,
     combinedChart: null,
     klineData: [],
     timer: null,
@@ -434,26 +418,6 @@ header {
 
   function getSyncToken() {
     return localStorage.getItem('gh_sync_token') || '';
-  }
-
-  function saveConfigToGitHub(data, token) {
-    return new Promise(function(resolve, reject) {
-      var xhr = new XMLHttpRequest();
-      xhr.open('PUT', API_URL, true);
-      xhr.setRequestHeader('Authorization', 'token ' + token);
-      xhr.setRequestHeader('Content-Type', 'application/json');
-      xhr.setRequestHeader('Accept', 'application/vnd.github+json');
-      xhr.onload = function() {
-        if (xhr.status >= 200 && xhr.status < 300) { resolve(JSON.parse(xhr.responseText)); }
-        else { reject(new Error('Save failed: ' + xhr.status)); }
-      };
-      xhr.onerror = function() { reject(new Error('Network error')); };
-      xhr.send(JSON.stringify({
-        message: 'Sync config ' + new Date().toISOString().slice(0,19),
-        content: btoa(unescape(encodeURIComponent(JSON.stringify(data)))),
-        sha: xhr._sha || undefined
-      }));
-    });
   }
 
   function getShaForSync(data, token) {
@@ -1235,6 +1199,13 @@ header {
     // 更新右侧信息面板
     var n = macdData.dif.length - 1;
     updateIndicatorInfoPanel(macdData, rsiData, kdjData, n);
+  }
+
+  function updateScoreDisplay2(id, result) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = (id.indexOf('macd') >= 0 ? 'MACD ' : id.indexOf('rsi') >= 0 ? 'RSI ' : 'KDJ ') + result.label;
+    el.className = 'indicator-score ' + result.cls;
   }
 
   function updateIndicatorInfoPanel(macdData, rsiData, kdjData, idx) {
