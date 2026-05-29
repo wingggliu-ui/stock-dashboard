@@ -927,7 +927,7 @@ header {
           }),
           markLine: {
             silent: true, symbol: 'none',
-            lineStyle: { color: '#555', type: 'solid', width: 1.2 },
+            lineStyle: { color: 'rgba(255,255,255,0.35)', type: 'dashed', width: 1.5 },
             data: [{ yAxis: 0 }],
           },
         },
@@ -970,7 +970,7 @@ header {
           symbol: 'none',
           markLine: {
             silent: true, symbol: 'none',
-            lineStyle: { color: '#555', type: 'solid', width: 1.2 },
+            lineStyle: { color: 'rgba(255,255,255,0.35)', type: 'dashed', width: 1.5 },
             data: [{ yAxis: 0 }],
           },
         },
@@ -1393,8 +1393,8 @@ header {
           name: '昨收', type: 'line',
           markLine: {
             silent: true, symbol: 'none',
-            lineStyle: { color: 'rgba(255,255,255,0.2)', type: 'dotted', width: 1 },
-            label: { formatter: '昨收 ' + preClose.toFixed(2), color: '#94a3b8', fontSize: 10 },
+            lineStyle: { color: 'rgba(255,255,255,0.5)', type: 'dashed', width: 2 },
+            label: { formatter: '昨收 ' + preClose.toFixed(2), color: '#e2e8f0', fontSize: 11, fontWeight: 'bold' },
             data: [{ yAxis: preClose }],
           },
           data: [], xAxisIndex: 0, yAxisIndex: 0,
