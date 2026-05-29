@@ -208,8 +208,8 @@ header {
 
 /* 指标信息面板 */
 .indicator-info-panel {
-  position: absolute; right: 8px; top: 8px; bottom: 28px;
-  width: 110px; display: flex; flex-direction: column; gap: 0;
+  position: absolute; right: 4px; top: 8px; bottom: 28px;
+  width: 100px; display: flex; flex-direction: column; gap: 0;
   pointer-events: none; z-index: 10;
 }
 .indicator-info-row {
@@ -889,6 +889,45 @@ header {
     return { k: kArr, d: dArr, j: jArr, dates: data.map(function(d) { return d.date; }) };
   }
 
+  // 分钟级MACD（参数适配分钟线，使用12/26/9分钟）
+  function computeMACDSeriesMinute(data) {
+    var n = data.length;
+    var closeArr = data.map(function(d) { return d.close; });
+    var ema12 = calcEMA(closeArr, 12);
+    var ema26 = calcEMA(closeArr, 26);
+    var dif = [], dea = [], macd = [];
+    for (var i = 0; i < n; i++) {
+      dif.push(ema12[i] - ema26[i]);
+      if (i === 0) dea.push(dif[0]);
+      else dea.push(dif[i] * (2/10) + dea[i-1] * (1 - 2/10));
+      macd.push(2 * (dif[i] - dea[i]));
+    }
+    return { dif: dif, dea: dea, macd: macd, dates: data.map(function(d, i) { return d.date || ('t' + i); }) };
+  }
+
+  // 分钟级KDJ（用滚动窗口最高最低价替代日线high/low）
+  function computeKDJSeriesMinute(data, nPeriod) {
+    nPeriod = nPeriod || 9;
+    var n = data.length;
+    var prices = data.map(function(d) { return d.close; });
+    var kArr = [], dArr = [], jArr = [];
+    for (var i = 0; i < n; i++) {
+      if (i < nPeriod - 1) { kArr.push(null); dArr.push(null); jArr.push(null); continue; }
+      var lowN = Infinity, highN = -Infinity;
+      for (var j = i - nPeriod + 1; j <= i; j++) {
+        lowN = Math.min(lowN, prices[j]);
+        highN = Math.max(highN, prices[j]);
+      }
+      var rsv = ((prices[i] - lowN) / (highN - lowN || 1)) * 100;
+      var prevK = i >= nPeriod ? (kArr[i-1] || 50) : 50;
+      var prevD = i >= nPeriod ? (dArr[i-1] || 50) : 50;
+      kArr.push(+(2/4 * rsv + (1 - 2/4) * prevK).toFixed(2));
+      dArr.push(+(2/4 * kArr[i] + (1 - 2/4) * prevD).toFixed(2));
+      jArr.push(+(3 * kArr[i] - 2 * dArr[i]).toFixed(2));
+    }
+    return { k: kArr, d: dArr, j: jArr, dates: data.map(function(d, i) { return d.date || ('t' + i); }) };
+  }
+
   // ==================== 指标渲染 ====================
 
   function renderFourLights(fourLightsResult) {
@@ -1111,9 +1150,9 @@ header {
     var option = {
       backgroundColor: 'transparent',
       grid: [
-        { left: '8%', right: '3%', top: 8, height: '28%' },
-        { left: '8%', right: '3%', top: '38%', height: '28%' },
-        { left: '8%', right: '3%', top: '68%', height: '26%' },
+        { left: '8%', right: '13%', top: 8, height: '28%' },
+        { left: '8%', right: '13%', top: '38%', height: '28%' },
+        { left: '8%', right: '13%', top: '68%', height: '26%' },
       ],
       xAxis: [
         { type: 'category', data: dates, gridIndex: 0, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } },
@@ -1470,19 +1509,15 @@ header {
         document.getElementById('minuteIndicators').style.display = 'grid';
         document.getElementById('maToggles').style.visibility = 'hidden';
 
-        // 加载日K数据用于技术指标计算
-        fetchKline(stock, { klt: 101, label: '日K' }).then(function(dkData) {
-          if (!dkData || dkData.length < 20) return;
-          dkData.sort(function(a, b) { return a.date.localeCompare(b.date); });
-          state.klineData = dkData;
-
-          var macdData = computeMACDSeries(dkData);
-          var rsiData = computeRSISeries(dkData, 14);
-          var kdjData = computeKDJSeries(dkData, 9);
-          renderCombinedIndicators(macdData, rsiData, kdjData);
-        }).catch(function(e) {
-          console.error('分时指标数据加载失败:', e);
+        // 基于当日分钟数据计算分时技术指标
+        var mdArr = md.trends.map(function(d, i) {
+          return { date: d.time, close: d.price, open: i > 0 ? md.trends[i-1].price : d.price, high: d.price, low: d.price, volume: d.volume };
         });
+        // 用分钟级价格数据，MACD参数适配分钟线
+        var macdData = computeMACDSeriesMinute(mdArr);
+        var rsiData = computeRSISeries(mdArr, 14);
+        var kdjData = computeKDJSeriesMinute(mdArr, 9);
+        renderCombinedIndicators(macdData, rsiData, kdjData);
         return;
       }
 
